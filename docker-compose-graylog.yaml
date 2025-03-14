@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  mongo:
+    image: mongo:6.0
+    container_name: graylog-mongo
+    restart: unless-stopped
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=adminpass
+    networks:
+      - graylog-net
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh --quiet
+      interval: 10s
+      retries: 5
+      start_period: 30s
+
+  opensearch:
+    image: opensearchproject/opensearch:2.19.1
+    container_name: graylog-opensearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g
+      - bootstrap.memory_lock=true
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=4iEUS!Y6N7
+      - DISABLE_SECURITY_PLUGIN=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    networks:
+      - graylog-net
+    ports:
+      - 9200:9200 # REST API
+      - 9600:9600 # Performance Analyzer
+    healthcheck:
+      test: ["CMD-SHELL", "curl -k -u admin:4iEUS!Y6N7 --silent --fail http://graylog-opensearch:9200/_cluster/health || exit 1"]
+      interval: 20s
+      retries: 15
+      start_period: 60s
+
+  graylog:
+    image: graylog/graylog:6.1.8
+    container_name: graylog
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+    environment:
+      - GRAYLOG_PASSWORD_SECRET=8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918
+      - GRAYLOG_ROOT_PASSWORD_SHA2=8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918
+      - GRAYLOG_HTTP_BIND_ADDRESS=0.0.0.0:9000
+      - GRAYLOG_HTTP_EXTERNAL_URI=http://localhost:9000/
+      - GRAYLOG_MONGODB_URI=mongodb://admin:adminpass@graylog-mongo:27017/graylog?authSource=admin
+      - GRAYLOG_ELASTICSEARCH_HOSTS=http://graylog-opensearch:9200
+      - GRAYLOG_ELASTICSEARCH_USERNAME=admin
+      - GRAYLOG_ELASTICSEARCH_PASSWORD=4iEUS!Y6N7
+    networks:
+      - graylog-net
+    ports:
+      - "9000:9000"   # Interface Web
+      - "1514:1514"   # Entrada Syslog TCP
+      - "1514:1514/udp" # Entrada Syslog UDP
+      - "12201:12201" # Entrada GELF TCP
+      - "12201:12201/udp" # Entrada GELF UDP
+    
+networks:
+  graylog-net:
+    driver: bridge
