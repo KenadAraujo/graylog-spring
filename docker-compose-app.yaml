@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  app:
+    image: kenadaraujo/teste:1.0
+    container_name: graylog_app
+    restart: unless-stopped
+    networks:
+      - app-net
+    ports:
+      - 5000:5000
+    logging:
+      driver: gelf
+      options:
+        gelf-address: "udp://localhost:12201"
+        tag: "graylog_app"
+
+networks:
+  app-net:
+    driver: bridge
